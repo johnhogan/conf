@@ -1,0 +1,150 @@
+package org.jbeans.config;
+
+import java.util.HashMap;
+import org.junit.After;
+import org.junit.AfterClass;
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+/**
+ *
+ * @author jhogan
+ *
+ */
+public class JbeansConfigurationProviderTest {
+
+    private static final String PATH_SEPARATOR = System.getProperty("file.separator");
+    private static final String USER_DIR = System.getProperty("user.dir");
+    private static final String CONFIG_DIR = USER_DIR + PATH_SEPARATOR + "src" + PATH_SEPARATOR + "test"
+            + PATH_SEPARATOR + "resources";
+    private static final String APP_NAME = "jee-config-demo";
+    JbeansConfigurationProvider jbeansConfigProvider;
+    Configurator configurator;
+
+    public JbeansConfigurationProviderTest() {
+    }
+
+    @BeforeClass
+    public static void setUpClass() {
+    }
+
+    @AfterClass
+    public static void tearDownClass() {
+    }
+
+    @Before
+    public void setUp() throws ConfigurationException {
+
+        // The Configurator supports Jasypt encypted properties, which require 
+        // creating a password to be used during encrypt/decrypt operations.
+        // This password has to be passed into the runtime environment for applications
+        // by specifying a system property to the Java JVM using: -DsomeKey=XXXX.  This
+        // example's -D argument is called "someKey", but this can be anything.  The purpose of this
+        // feature is to allow for multiple applications running on the same server to all have
+        // their own Jasypt encrypt/decrypt passwords.
+        
+        // The Configurator discovers the name of the ENV var needed to read the
+        // enc/dec password during initialization.  This occurs during app server startup.
+        
+        // As mentioned, the name of the ENV var is configured by the developer.  And  is done
+        // in the internal properties file, called jbeans-app.properties. The property to set is:
+        //     jbeans.app.props.encKey.name=xxxx
+        
+        // For more info, see:  xxxx
+        
+        // when starting JBoss, add this to standalone start script:   -DsomeKey=MYPAS_WORD
+        System.setProperty("someKey", "MYPAS_WORD");
+        
+        configurator = new Configurator();
+
+        configurator.APPLICATION_NAME = "jee-config-demo";
+        configurator.EXTERNAL_PROPS_FILE = "environment.properties";
+        configurator.configuration = new HashMap<>();
+
+        configurator.initializeAppProperties();
+        jbeansConfigProvider = new JbeansConfigurationProvider();
+        jbeansConfigProvider.APP_CONFIG_DIR = CONFIG_DIR;
+
+    }
+
+    @After
+    public void tearDown() {
+    }
+
+    /**
+     * Test of initializeProps method, of class JbeansConfigurationProvider.
+     */
+    @Test
+    public void testEncryptedProperty() throws Exception {
+        jbeansConfigProvider.initializeProps();
+        assertNotNull(jbeansConfigProvider.getConfiguration());
+        assertFalse(jbeansConfigProvider.getConfiguration().isEmpty());
+        
+        // The encrypted password is decrypted when loaded.
+        String unEncryptedPassword=jbeansConfigProvider.getConfiguration().get("jbeans.config.demo.test.db.password");
+        assertTrue(unEncryptedPassword.equals("mySecretPassword"));
+    }
+
+    /**
+     * Test of getString method, of class JbeansConfigurationProvider.
+     */
+    @Test
+    public void testGetString_String_String() throws ConfigurationException {
+        String key = "some.unknown.property";
+        String expResult = "environment.properties";
+        String result = jbeansConfigProvider.getString(key, "environment.properties");
+        assertEquals(expResult, result);
+    }
+
+    /**
+     * Test of saveOrUpdateProperties method, of class JbeansConfigurationProvider.
+     */
+    @Test
+    public void testSaveOrUpdateProperties() throws Exception {
+        String propName = "jbeans.demo.from.address";
+        String prpValue1 = "tester@jbeans.org";
+        jbeansConfigProvider.initializeProps();
+        jbeansConfigProvider.saveOrUpdateProperties(propName, prpValue1);
+        assertFalse(jbeansConfigProvider.getConfiguration().get(propName).equals("jbeans.demo.from.address"));
+        assertTrue(jbeansConfigProvider.getConfiguration().get(propName).equals(prpValue1));
+
+        String prpValue2 = "tester@childrens.harvard.edu";
+        jbeansConfigProvider.saveOrUpdateProperties(propName, prpValue2);
+        assertTrue(jbeansConfigProvider.getConfiguration().get(propName).equals(prpValue2));
+    }
+
+    /**
+     * Test of deleteProperty method, of class JbeansConfigurationProvider.
+     */
+    @Test
+    public void testDeleteProperty() throws Exception {
+        String propName = "jbeans.demo.from.address";
+        String prpValue1 = "tester@jbeans.org";
+        jbeansConfigProvider.initializeProps();
+        jbeansConfigProvider.deleteProperty(propName);
+        assertNull(jbeansConfigProvider.getConfiguration().get(propName));
+
+        jbeansConfigProvider.saveOrUpdateProperties(propName, prpValue1);
+        assertTrue(jbeansConfigProvider.getConfiguration().get(propName).equals(prpValue1));
+    }
+
+    /**
+     * Test of deleteProperty method, of class JbeansConfigurationProvider.
+     */
+    @Test( expected=ConfigurationException.class) 
+    public void testMisconfiguredPropertiesFile() throws Exception {
+        jbeansConfigProvider = new JbeansConfigurationProvider();
+
+        configurator = new Configurator();
+        JbeansConfigurationProvider.APP_CONFIG_DIR = "some/broken/path/dir";
+        configurator.APPLICATION_NAME = "jee-config-demo";
+        configurator.EXTERNAL_PROPS_FILE = "environment.properties";
+        configurator.configuration = new HashMap<>();
+        // non ConfigurationProvider init, bypassing fetchConfiguration for unit testing without app server container and CDI.
+        configurator.initializeAppProperties();
+        jbeansConfigProvider.initializeProps();
+    }
+
+}
